@@ -1,0 +1,471 @@
+classdef trafic_control < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                   matlab.ui.Figure
+        TabGroup                   matlab.ui.container.TabGroup
+        Tab1                       matlab.ui.container.Tab
+        TraficContorlUsingImageProcessingLabel  matlab.ui.control.Label
+        UploadreferenceimageLabel  matlab.ui.control.Label
+        uploadButton               matlab.ui.control.Button
+        Tab2                       matlab.ui.container.Tab
+        ResetButton                matlab.ui.control.Button
+        NextButton                 matlab.ui.control.Button
+        UIAxes_3                   matlab.ui.control.UIAxes
+        Tab3                       matlab.ui.container.Tab
+        SelectnumberofcarsinroadtocorrespondingtimeforgreenlightLabel  matlab.ui.control.Label
+        NextButton_2               matlab.ui.control.Button
+        Label_4                    matlab.ui.control.Label
+        secondsSlider_3            matlab.ui.control.Slider
+        secondsLabel_2             matlab.ui.control.Label
+        Label_3                    matlab.ui.control.Label
+        secondsSlider_2            matlab.ui.control.Slider
+        secondsLabel               matlab.ui.control.Label
+        Label_2                    matlab.ui.control.Label
+        secondsSlider              matlab.ui.control.Slider
+        secondsSliderLabel         matlab.ui.control.Label
+        Tab4                       matlab.ui.container.Tab
+        Label_5                    matlab.ui.control.Label
+        SuggestedtimeLabel         matlab.ui.control.Label
+        NumberofcarsLabel          matlab.ui.control.Label
+        uploadimageLabel           matlab.ui.control.Label
+        Label                      matlab.ui.control.Label
+        UploadButton               matlab.ui.control.Button
+        UIAxes_2                   matlab.ui.control.UIAxes
+        UIAxes                     matlab.ui.control.UIAxes
+    end
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            
+        end
+
+        % Button pushed function: uploadButton
+        function uploadButtonPushed(app, event)
+            global refimg;
+            global x_coords;
+            global y_coords;
+            [filename, pathname] = uigetfile('*.*', 'Pick an Image');
+            filename=strcat(pathname,filename);
+            refimg=imread(filename);
+            figure('Visible', 'off');
+            app.TabGroup.SelectedTab = app.Tab2;
+            imshow(refimg,'Parent',app.UIAxes_3);
+            hold on;
+            p = drawpolygon('LineWidth',7,'Color','cyan','Parent',app.UIAxes_3);
+            hold off;
+
+            polygon_vertices = p.Position;
+            x_coords = polygon_vertices(:, 1);
+            y_coords = polygon_vertices(:, 2);
+            display(x_coords);
+            display(y_coords);
+            
+        end
+
+        % Button pushed function: UploadButton
+        function UploadButtonPushed(app, event)
+            global refimg;
+            global x_coords;
+            global y_coords;
+            [filename, pathname] = uigetfile('*.*', 'Pick an Image');
+            filename=strcat(pathname,filename);
+            img=imread(filename);
+            imshow(img,'Parent',app.UIAxes);
+
+            
+            grayimg = rgb2gray(img);
+
+            
+            grayref = rgb2gray(refimg);
+
+            
+            edgeimg = edge(grayimg, 'Canny');
+
+            
+            edgeref = edge(grayref, 'Canny');
+
+            difimg=edgeimg-edgeref;
+
+            se90 = strel('rectangle',[2 4]);
+            se0 = strel('rectangle',[1 2]);
+            
+            BWsdil = imdilate(difimg,[se90 se0]);
+
+            
+            BWdfill = imfill(BWsdil,'holes');
+
+            
+            BWnobord = imclearborder(BWdfill,4);
+
+            
+            seD = strel('diamond',1);
+            BWfinal = imerode(BWnobord,seD);
+            BWfinal = imerode(BWfinal,seD);
+
+            
+            
+            
+            % Convert the image to grayscale
+            grayImg = BWfinal;
+            
+            % Detect the edges using Canny edge detection
+            edgeImg = edge(grayImg, 'Canny');
+            
+            % Create a binary mask for the region of interest
+            mask = false(size(edgeImg));
+            x = x_coords; % x-coordinates of polygon corners
+            y = y_coords; % y-coordinates of polygon corners
+            mask(poly2mask(x, y, size(edgeImg,1), size(edgeImg,2))) = true;
+
+            
+            % Apply the mask to the edge image
+            edgeImg = edgeImg & mask;
+            
+            % Perform morphological closing to close gaps between edges
+            se = strel("disk",5);
+            edgeImg = imclose(edgeImg, se);
+            
+            % Perform blob analysis to detect connected components
+            blobAnalysis = vision.BlobAnalysis('AreaOutputPort', false, 'BoundingBoxOutputPort', true, 'MinimumBlobArea', 1500 );
+            [blobArea, blobBoxes] = step(blobAnalysis, edgeImg);
+            
+            % Count the number of vehicles
+            numVehicles = size(blobBoxes, 1);
+            
+            % Display the result
+            disp(['Number of vehicles: ', num2str(numVehicles)]);
+            imshow(img,'Parent',app.UIAxes_2);
+            app.Label.Text=num2str(numVehicles);
+            
+            
+            
+            global fastseconds1;
+            global fastseconds2;
+            global fastseconds3;
+            
+
+            str0='0 seconds';
+            str10='10 seconds';
+            str20='20 seconds';
+            str30='30 seconds';
+            
+            if numVehicles==0
+                app.Label_5.Text=str0;
+            elseif numVehicles>0 && numVehicles<fastseconds1
+                app.Label_5.Text=str10;
+            elseif numVehicles<fastseconds2
+                app.Label_5.Text=str20;
+            elseif numVehicles<fastseconds3
+                app.Label_5.Text=str30;
+            end    
+
+            hold on;
+            for i = 1:numVehicles
+                rectangle('Parent',app.UIAxes_2,'Position', blobBoxes(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
+            end
+            hold off;
+            
+        end
+
+        % Button pushed function: NextButton
+        function NextButtonPushed(app, event)
+            app.TabGroup.SelectedTab = app.Tab3;
+        end
+
+        % Button pushed function: ResetButton
+        function ResetButtonPushed(app, event)
+            app.TabGroup.SelectedTab = app.Tab1;
+        end
+
+        % Value changing function: secondsSlider
+        function secondsSliderValueChanging(app, event)
+
+            
+            changingValue = event.Value;
+            
+            app.Label_2.Text=num2str(floor(changingValue));
+        end
+
+        % Value changing function: secondsSlider_2
+        function secondsSlider_2ValueChanging(app, event)
+   
+            
+            changingValue = event.Value;
+
+            app.Label_3.Text=num2str(floor(changingValue));
+        end
+
+        % Value changing function: secondsSlider_3
+        function secondsSlider_3ValueChanging(app, event)
+
+            
+            changingValue = event.Value;
+            app.Label_4.Text=num2str(floor(changingValue));
+        end
+
+        % Button pushed function: NextButton_2
+        function NextButton_2Pushed(app, event)
+           app.TabGroup.SelectedTab = app.Tab4;
+            
+        end
+
+        % Value changed function: secondsSlider
+        function secondsSliderValueChanged(app, event)
+            global fastseconds1;
+            value = app.secondsSlider.Value;
+            fastseconds1=floor(value);
+        end
+
+        % Value changed function: secondsSlider_2
+        function secondsSlider_2ValueChanged(app, event)
+            value = app.secondsSlider_2.Value;
+            global fastseconds2;
+            fastseconds2=floor(value);
+        end
+
+        % Value changed function: secondsSlider_3
+        function secondsSlider_3ValueChanged(app, event)
+            value = app.secondsSlider_3.Value;
+            global fastseconds3;
+            fastseconds3=floor(value);
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 640 480];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create TabGroup
+            app.TabGroup = uitabgroup(app.UIFigure);
+            app.TabGroup.Position = [1 1 640 480];
+
+            % Create Tab1
+            app.Tab1 = uitab(app.TabGroup);
+            app.Tab1.Title = 'Tab1';
+            app.Tab1.BackgroundColor = [0.902 0.902 0.902];
+
+            % Create uploadButton
+            app.uploadButton = uibutton(app.Tab1, 'push');
+            app.uploadButton.ButtonPushedFcn = createCallbackFcn(app, @uploadButtonPushed, true);
+            app.uploadButton.IconAlignment = 'center';
+            app.uploadButton.BackgroundColor = [0.0745 0.6235 1];
+            app.uploadButton.FontWeight = 'bold';
+            app.uploadButton.Position = [270 217 100 23];
+            app.uploadButton.Text = 'upload';
+
+            % Create UploadreferenceimageLabel
+            app.UploadreferenceimageLabel = uilabel(app.Tab1);
+            app.UploadreferenceimageLabel.HorizontalAlignment = 'center';
+            app.UploadreferenceimageLabel.Position = [253 264 133 22];
+            app.UploadreferenceimageLabel.Text = 'Upload reference image';
+
+            % Create TraficContorlUsingImageProcessingLabel
+            app.TraficContorlUsingImageProcessingLabel = uilabel(app.Tab1);
+            app.TraficContorlUsingImageProcessingLabel.HorizontalAlignment = 'center';
+            app.TraficContorlUsingImageProcessingLabel.FontName = 'Arial';
+            app.TraficContorlUsingImageProcessingLabel.FontSize = 36;
+            app.TraficContorlUsingImageProcessingLabel.Position = [3 354 633 47];
+            app.TraficContorlUsingImageProcessingLabel.Text = 'Trafic Contorl Using Image Processing';
+
+            % Create Tab2
+            app.Tab2 = uitab(app.TabGroup);
+            app.Tab2.Title = 'Tab2';
+
+            % Create UIAxes_3
+            app.UIAxes_3 = uiaxes(app.Tab2);
+            title(app.UIAxes_3, 'Before')
+            app.UIAxes_3.FontWeight = 'bold';
+            app.UIAxes_3.XColor = 'none';
+            app.UIAxes_3.XTick = [];
+            app.UIAxes_3.YColor = 'none';
+            app.UIAxes_3.YTick = [];
+            app.UIAxes_3.Visible = 'off';
+            app.UIAxes_3.Position = [21 73 597 362];
+
+            % Create NextButton
+            app.NextButton = uibutton(app.Tab2, 'push');
+            app.NextButton.ButtonPushedFcn = createCallbackFcn(app, @NextButtonPushed, true);
+            app.NextButton.BackgroundColor = [0.0745 0.6235 1];
+            app.NextButton.FontWeight = 'bold';
+            app.NextButton.Position = [394 25 138 31];
+            app.NextButton.Text = 'Next';
+
+            % Create ResetButton
+            app.ResetButton = uibutton(app.Tab2, 'push');
+            app.ResetButton.ButtonPushedFcn = createCallbackFcn(app, @ResetButtonPushed, true);
+            app.ResetButton.IconAlignment = 'center';
+            app.ResetButton.BackgroundColor = [1 0.4118 0.1608];
+            app.ResetButton.FontWeight = 'bold';
+            app.ResetButton.Position = [85 25 138 31];
+            app.ResetButton.Text = 'Reset';
+
+            % Create Tab3
+            app.Tab3 = uitab(app.TabGroup);
+            app.Tab3.Title = 'Tab3';
+
+            % Create secondsSliderLabel
+            app.secondsSliderLabel = uilabel(app.Tab3);
+            app.secondsSliderLabel.HorizontalAlignment = 'right';
+            app.secondsSliderLabel.Position = [123 356 66 22];
+            app.secondsSliderLabel.Text = '10 seconds';
+
+            % Create secondsSlider
+            app.secondsSlider = uislider(app.Tab3);
+            app.secondsSlider.Limits = [0 30];
+            app.secondsSlider.ValueChangedFcn = createCallbackFcn(app, @secondsSliderValueChanged, true);
+            app.secondsSlider.ValueChangingFcn = createCallbackFcn(app, @secondsSliderValueChanging, true);
+            app.secondsSlider.Position = [210 365 150 3];
+
+            % Create Label_2
+            app.Label_2 = uilabel(app.Tab3);
+            app.Label_2.Position = [447 346 25 22];
+            app.Label_2.Text = '0';
+
+            % Create secondsLabel
+            app.secondsLabel = uilabel(app.Tab3);
+            app.secondsLabel.HorizontalAlignment = 'right';
+            app.secondsLabel.Position = [126 275 66 22];
+            app.secondsLabel.Text = '20 seconds';
+
+            % Create secondsSlider_2
+            app.secondsSlider_2 = uislider(app.Tab3);
+            app.secondsSlider_2.Limits = [0 30];
+            app.secondsSlider_2.ValueChangedFcn = createCallbackFcn(app, @secondsSlider_2ValueChanged, true);
+            app.secondsSlider_2.ValueChangingFcn = createCallbackFcn(app, @secondsSlider_2ValueChanging, true);
+            app.secondsSlider_2.Position = [213 284 150 3];
+
+            % Create Label_3
+            app.Label_3 = uilabel(app.Tab3);
+            app.Label_3.Position = [450 265 25 22];
+            app.Label_3.Text = '0';
+
+            % Create secondsLabel_2
+            app.secondsLabel_2 = uilabel(app.Tab3);
+            app.secondsLabel_2.HorizontalAlignment = 'right';
+            app.secondsLabel_2.Position = [126 196 66 22];
+            app.secondsLabel_2.Text = '30 seconds';
+
+            % Create secondsSlider_3
+            app.secondsSlider_3 = uislider(app.Tab3);
+            app.secondsSlider_3.Limits = [0 30];
+            app.secondsSlider_3.ValueChangedFcn = createCallbackFcn(app, @secondsSlider_3ValueChanged, true);
+            app.secondsSlider_3.ValueChangingFcn = createCallbackFcn(app, @secondsSlider_3ValueChanging, true);
+            app.secondsSlider_3.Position = [213 205 150 3];
+
+            % Create Label_4
+            app.Label_4 = uilabel(app.Tab3);
+            app.Label_4.Position = [450 186 25 22];
+            app.Label_4.Text = '0';
+
+            % Create NextButton_2
+            app.NextButton_2 = uibutton(app.Tab3, 'push');
+            app.NextButton_2.ButtonPushedFcn = createCallbackFcn(app, @NextButton_2Pushed, true);
+            app.NextButton_2.BackgroundColor = [0.0745 0.6235 1];
+            app.NextButton_2.Position = [270 100 100 23];
+            app.NextButton_2.Text = 'Next';
+
+            % Create SelectnumberofcarsinroadtocorrespondingtimeforgreenlightLabel
+            app.SelectnumberofcarsinroadtocorrespondingtimeforgreenlightLabel = uilabel(app.Tab3);
+            app.SelectnumberofcarsinroadtocorrespondingtimeforgreenlightLabel.Position = [138 413 363 22];
+            app.SelectnumberofcarsinroadtocorrespondingtimeforgreenlightLabel.Text = 'Select number of cars in road to corresponding time for green light';
+
+            % Create Tab4
+            app.Tab4 = uitab(app.TabGroup);
+            app.Tab4.Title = 'Tab4';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.Tab4);
+            title(app.UIAxes, 'Before')
+            app.UIAxes.XColor = 'none';
+            app.UIAxes.XTick = [];
+            app.UIAxes.YColor = 'none';
+            app.UIAxes.YTick = [];
+            app.UIAxes.Visible = 'off';
+            app.UIAxes.Position = [20 239 267 162];
+
+            % Create UIAxes_2
+            app.UIAxes_2 = uiaxes(app.Tab4);
+            title(app.UIAxes_2, 'After')
+            app.UIAxes_2.XColor = 'none';
+            app.UIAxes_2.XTick = [];
+            app.UIAxes_2.YColor = 'none';
+            app.UIAxes_2.YTick = [];
+            app.UIAxes_2.Visible = 'off';
+            app.UIAxes_2.Position = [329 239 267 162];
+
+            % Create UploadButton
+            app.UploadButton = uibutton(app.Tab4, 'push');
+            app.UploadButton.ButtonPushedFcn = createCallbackFcn(app, @UploadButtonPushed, true);
+            app.UploadButton.BackgroundColor = [0.0745 0.6235 1];
+            app.UploadButton.Position = [104 149 100 23];
+            app.UploadButton.Text = 'Upload';
+
+            % Create Label
+            app.Label = uilabel(app.Tab4);
+            app.Label.Position = [447 149 25 22];
+            app.Label.Text = '';
+
+            % Create uploadimageLabel
+            app.uploadimageLabel = uilabel(app.Tab4);
+            app.uploadimageLabel.Position = [115 190 77 22];
+            app.uploadimageLabel.Text = 'upload image';
+
+            % Create NumberofcarsLabel
+            app.NumberofcarsLabel = uilabel(app.Tab4);
+            app.NumberofcarsLabel.Position = [345 149 90 22];
+            app.NumberofcarsLabel.Text = 'Number of cars:';
+
+            % Create SuggestedtimeLabel
+            app.SuggestedtimeLabel = uilabel(app.Tab4);
+            app.SuggestedtimeLabel.Position = [345 121 92 22];
+            app.SuggestedtimeLabel.Text = 'Suggested time:';
+
+            % Create Label_5
+            app.Label_5 = uilabel(app.Tab4);
+            app.Label_5.Position = [447 121 121 22];
+            app.Label_5.Text = '';
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = trafic_control
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
